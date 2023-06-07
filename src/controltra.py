@@ -106,6 +106,7 @@ if __name__ == "__main__":
             if not init:
                 os.system("clear")
                 pub.publish(Vel)
+                
                 if iterator < n:
                     x_d = traj_x[iterator]
                     y_d = traj_y[iterator]
@@ -157,6 +158,7 @@ if __name__ == "__main__":
                         step[0] = True
                         step[1] = True
                         iterator = iterator + 1
+                
                 pos = np.array([x, y, theta])
                 error = pos_d - pos
                 error[2] = fix_angle(error[2])

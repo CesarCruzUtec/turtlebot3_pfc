@@ -15,7 +15,7 @@ class ControlPosition:
     def __init__(self, xd, yd, thetad, kp, ki, kd):
         self.posd_True = np.array([xd, yd, thetad])
         self.xd, self.yd, self.thetad = [], [], []
-        self.x, self.y, self.theta = xd, yd, thetad
+        self.x, self.y, self.theta = 0.0, 0.0, 0.0
         self.xp, self.yp, self.thetap = [], [], []
         self.xe, self.ye, self.thetae = [], [], []
         self.time = []

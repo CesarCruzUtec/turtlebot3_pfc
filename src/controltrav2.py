@@ -1,249 +1,193 @@
 #!/usr/bin/env python3
 
-import rospy
-import numpy as np
-from geometry_msgs.msg import Twist, Vector3
-from nav_msgs.msg import Odometry
-import tf.transformations
 import os
+
 import matplotlib.pyplot as plt
+import numpy as np
+import rospy
+import tf.transformations
+from geometry_msgs.msg import Twist, Vector3
+from matplotlib.gridspec import GridSpec
+from nav_msgs.msg import Odometry
 
 
-global x, y, theta, k, S, thetaR
-x = 0.0
-y = 0.0
-theta = 0.0
-thetaR = 0.0
-k = 0.0
-S = np.zeros((3, 2))
-init = True
+class ControlTrajectory:
+    def __init__(self, xd, yd, thetad, kp, ki, kd):
+        self.x_True = xd
+        self.y_True = yd
+        self.theta_True = thetad
+        self.x, self.y, self.theta = 0.0, 0.0, 0.0
+        self.xd, self.yd, self.thetad = [], [], []
+        self.xp, self.yp, self.thetap = [], [], []
+        self.xe, self.ye, self.thetae = [], [], []
+        self.time = []
+        self.k = 0.0
+        self.S = np.zeros((3, 2))
+        self.kp = np.diag(kp)
+        self.kd = np.diag(kd)
+        self.ki = np.diag(ki)
+        self.rate = 10
+        self.newPath = True
+        self.ierr_p = np.array([0.0, 0.0, 0.0])
+        self.vmax = 0.26
+        self.wmax = 1.82
+        self.step = [True, True]
+        self.iterator = 0
+        self.finished = False
 
+    def callback(self, data):
+        self.x = data.pose.pose.position.x
+        self.y = data.pose.pose.position.y
+        quaternion = data.pose.pose.orientation
+        euler = tf.transformations.euler_from_quaternion(
+            [quaternion.x, quaternion.y, quaternion.z, quaternion.w]
+        )
+        if (euler[2] - self.theta) * 10 > 1.9:
+            self.k = self.k + 1
+        elif (euler[2] - self.theta) * 10 < -1.9:
+            self.k = self.k - 1
+        self.theta = 2 * np.pi * self.k + euler[2]
+        self.S = np.array(
+            [[np.cos(self.theta), 0.0], [np.sin(self.theta), 0.0], [0.0, 1.0]]
+        )
 
-# Fix orientatation greater than pi or less than -pi
-def fix_angle(angle):
-    if angle > np.pi:
-        angle = angle - 2 * np.pi
-    elif angle < -np.pi:
-        angle = angle + 2 * np.pi
-    return angle
+    def plot_init(self):
+        self.fig = plt.figure(figsize=(12, 6))
+        gs1 = GridSpec(3, 2, wspace=0.15, hspace=0.1)
+        self.ax1 = self.fig.add_subplot(gs1[:, 0])
+        self.ax2 = self.fig.add_subplot(gs1[0, 1])
+        self.ax3 = self.fig.add_subplot(gs1[1, 1], sharex=self.ax2)
+        self.ax4 = self.fig.add_subplot(gs1[2, 1], sharex=self.ax2)
+        self.ax1.set_xlim(-1.5, 1.5), self.ax1.set_ylim(-1.5, 1.5)
+        self.ax1.grid(), self.ax2.grid(), self.ax3.grid(), self.ax4.grid()
+        self.ax1.set_xlabel("x(m)")
+        self.ax1.set_ylabel("y(m)"), self.ax2.set_ylabel("x(m)")
+        self.ax3.set_ylabel("y(m)"), self.ax4.set_ylabel("theta(rad)")
+        self.ax4.set_xlabel("time(s)")
+        self.ax2.tick_params(labelbottom=False)
+        self.ax3.tick_params(labelbottom=False)
 
+        self.ax1.plot(self.x_True[0], self.y_True[1], "r--")
+        plt.draw()
+        plt.pause(0.001)
 
-# Get current position(x,y) and orientation(theta) from odom topic
-def callback(data):
-    global x, y, theta, k, S, init, thetaR
-    if init:
-        init = False
+    def update_plot(self):
+        self.time.append(rospy.get_time() - self.initialTime)
+        self.xp.append(self.x), self.yp.append(self.y), self.thetap.append(self.theta)
 
-    x = data.pose.pose.position.x
-    y = data.pose.pose.position.y
-    # Convert orientation from quatertion to euler angles to get theta(z-axis)
-    quaternion = data.pose.pose.orientation
-    euler = tf.transformations.euler_from_quaternion(
-        [quaternion.x, quaternion.y, quaternion.z, quaternion.w]
-    )
-    if (
-        thetaR < np.pi
-        and thetaR > 0.9 * np.pi
-        and euler[2] > -np.pi
-        and euler[2] < -0.9 * np.pi
-    ):
-        k = k + 1
-    elif (
-        thetaR > -np.pi
-        and thetaR < -0.9 * np.pi
-        and euler[2] < np.pi
-        and euler[2] > 0.9 * np.pi
-    ):
-        k = k - 1
-    thetaR = euler[2]
-    theta = 2 * k * np.pi + thetaR
-    S = np.array([[np.cos(theta), 0.0], [np.sin(theta), 0.0], [0.0, 1.0]])
+        self.ax1.plot(self.xp, self.yp, "b")
+        self.ax2.plot(self.time, self.xp, "b")
+        self.ax2.plot(self.time, self.xd, "r")
+        self.ax2.plot(self.time, self.xe, "g")
+        self.ax3.plot(self.time, self.yp, "b")
+        self.ax3.plot(self.time, self.yd, "r")
+        self.ax3.plot(self.time, self.ye, "g")
+        self.ax4.plot(self.time, self.thetap, "b")
+        self.ax4.plot(self.time, self.thetad, "r")
+        self.ax4.plot(self.time, self.thetae, "g")
 
+        plt.draw()
+        plt.pause(0.001)
 
-# Position control to move the robot to a desired position and orientation
-# using the current position and orientation from odom topic and
-# publishing the velocity to cmd_vel topic
+    def printStatus(self):
+        print("Current position: ")
+        print("    x = {:>6.4f}".format(self.xp[-1]))
+        print("    y = {:>6.4f}".format(self.yp[-1]))
+        print("theta = {:>6.4f}".format(self.thetap[-1] * 180 / np.pi))
+        print("Desired position: ")
+        print("    x = {:>6.4f}".format(self.xd[-1]))
+        print("    y = {:>6.4f}".format(self.yd[-1]))
+        print("theta = {:>6.4f}".format(self.thetad[-1] * 180 / np.pi))
+        print("Error: ")
+        print("    x = {:>6.4f}".format(self.xe[-1]))
+        print("    y = {:>6.4f}".format(self.ye[-1]))
+        print("theta = {:>6.4f}".format(self.thetae[-1] * 180 / np.pi))
+
+    def newDesiredPosition(self):
+        posd = np.array(self.x_True[self.iterator], self.y_True[self.iterator], 0.0)
+        err = posd - np.array([self.x, self.y, 0.0])
+        theta_dp = np.arctan2(err[1], err[0]) + 2 * np.pi * self.k
+        if np.linalg.norm(err[0:2]) > 0.02 and self.step[0]:
+            err[2] = theta_dp - self.theta
+            if abs(err[2]) > 0.01 and self.step[1]:
+                self.pos_d = np.array([self.x, self.y, theta_dp])
+                print("Rotating to next orientation")
+            else:
+                self.step[1] = False
+                self.pos_d = np.array([posd[0], posd[1], theta_dp])
+                print("Moving to next position")
+        else:
+            self.step[0] = False
+            err[2] = self.posd_True[2] - self.theta + 2 * np.pi * self.k
+            if abs(err[2]) > 0.01 and not self.step[1]:
+                self.pos_d = self.posd_True
+                print("Rotating to final orientation")
+            else:
+                self.step[1] = True
+                self.finished = True
+                print("Final position reached")
+                plt.savefig("controlPos.png")
+                plt.close()
+
+        self.xd.append(self.pos_d[0])
+        self.yd.append(self.pos_d[1])
+        self.thetad.append(self.pos_d[2])
+
+    def control(self):
+        pos = np.array([self.x, self.y, self.theta])
+        err = self.pos_d - pos
+        if self.newPath:
+            derr = np.array([0.0, 0.0, 0.0])
+            ierr = np.array([0.0, 0.0, 0.0])
+            self.ierr_p = np.array([0.0, 0.0, 0.0])
+            self.newPath = False
+        else:
+            err_p = np.array([self.xe[-1], self.ye[-1], self.thetae[-1]])
+            derr = (err - err_p) * self.rate
+            ierr = self.ierr_p + err / self.rate
+        self.xe.append(err[0]), self.ye.append(err[1]), self.thetae.append(err[2])
+        dpos = np.dot(self.kp, err) + np.dot(self.kd, derr) + np.dot(self.ki, ierr)
+        ik = np.dot(np.linalg.pinv(self.S), dpos)
+        self.vel.linear.x = np.clip(ik[0], -self.vmax, self.vmax)
+        self.vel.angular.z = np.clip(ik[1], -self.wmax, self.wmax)
+
+    def run(self):
+        rospy.Subscriber("/odom", Odometry, self.callback)
+        pub = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
+        rate = rospy.Rate(self.rate)
+        self.vel = Twist(Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0))
+        rospy.wait_for_message("/odom", Odometry)
+        self.plot_init()
+        self.initialTime = rospy.get_time()
+
+        try:
+            while not rospy.is_shutdown() and not self.finished:
+                pub.publish(self.vel)
+                os.system("clear")
+
+                self.newDesiredPosition()
+                self.control()
+                self.update_plot()
+                self.printStatus()
+
+                print("\n")
+                rate.sleep()
+            self.vel = Twist(Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0))
+            pub.publish(self.vel)
+        except KeyboardInterrupt:
+            self.vel = Twist(Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0))
+            pub.publish(self.vel)
+            plt.savefig("controlTra.png")
+            plt.close()
+            print("Shutting down")
+
 
 if __name__ == "__main__":
     rospy.init_node("controltra", disable_signals=True)
-    rospy.Subscriber("/odom", Odometry, callback)
-    pub = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
-    rate = rospy.Rate(10)
-    Vel = Twist(Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0))
-
-    # Initiliaze plot
-    fig, axs = plt.subplots(nrows=4, ncols=1, figsize=(6, 9))
-    axs[0].set_xlim(-2, 2)
-    axs[0].set_ylim(-2, 2)
-    axs[0].set_xlabel("x(m)")
-    axs[0].set_ylabel("y(m)")
-    axs[0].grid(True)
-    axs[1].set_ylabel("x(m)")
-    axs[1].grid(True)
-    axs[2].set_ylabel("y(m)")
-    axs[2].grid(True)
-    axs[3].set_ylabel("theta(rad)")
-    axs[3].grid(True)
-    axs[3].set_xlabel("time(s)")
-    tp, xp, yp, thetap = [], [], [], []
-    xdp, ydp, thetadp = [], [], []
-    xe, ye, thetae = [], [], []
-
-    # Velocity limits
-    v_max = 0.26  # 0.26 m/s
-    w_max = 1.82  # 1.82 rad/s
-
-    init_pose = True
-    pos_d = np.array([0.0, 0.0, 0.0])
-    traj_x = np.array([-1.0, 1.0, 1.0, -1.0, -1.0])
-    traj_y = np.array([-1.0, -1.0, 1.0, 1.0, -1.0])
-
-    # Plot desired position
-    axs[0].plot(traj_x, traj_y, "r--", label="Desired position")
-    plt.draw()
-    plt.pause(0.001)
-
-    # Position control gains (matrix Kp)
-    Kp = np.diag([2, 2, 2])
-    Kd = np.diag([0.15, 0.15, 0.15])
-
-    iterator = 0
-    theta_dpp = 0
-    try:
-        while not rospy.is_shutdown():
-            if not init:
-                os.system("clear")
-                pub.publish(Vel)
-
-                if iterator == np.size(traj_x):
-                    Vel.linear.x = 0.0
-                    Vel.angular.z = 0.0
-                    pub.publish(Vel)
-                    print("Stopped")
-                    plt.savefig("controltra.png")
-                    break
-                elif iterator == 0:
-                    x_d = traj_x[0]
-                    y_d = traj_y[0]
-                    theta_dp = np.arctan2(y_d - y, x_d - x) + 2 * k * np.pi
-                    theta_d = (
-                        np.arctan2(traj_y[1] - y_d, traj_x[1] - x_d) + 2 * k * np.pi
-                    )
-                    if abs(x_d - x) > 0.02 and abs(y_d - y) > 0.02:
-                        # if(abs(fix_angle(theta_dp-theta)) > 0.05 and init_pose):
-                        if abs(theta_dp - theta) > 0.05 and init_pose:
-                            pos_d = np.array([x, y, theta_dp])
-                        else:
-                            init_pose = False
-                            pos_d = np.array([x_d, y_d, theta_dp])
-                    else:
-                        # if(abs(fix_angle(theta_d-theta)) > 0.05):
-                        if abs(theta_d - theta) > 0.05:
-                            pos_d = np.array([x, y, theta_d])
-                        else:
-                            iterator = 1
-                            init_pose = True
-                else:
-                    x_d = traj_x[iterator]
-                    y_d = traj_y[iterator]
-                    theta_dp = np.arctan2(y_d - y, x_d - x) + 2 * k * np.pi
-                    # if(abs(fix_angle(theta_dp-theta)) > 0.01 and init_pose):
-                    if abs(theta_dp - theta) > 0.01 and init_pose:
-                        pos_d = np.array(
-                            [traj_x[iterator - 1], traj_y[iterator - 1], theta_dp]
-                        )
-                        # pos_d = np.array([x,y,theta_dp])
-                    else:
-                        init_pose = False
-                        if abs(x_d - x) > 0.02 or abs(y_d - y) > 0.02:
-                            pos_d = np.array([x_d, y_d, theta_dp])
-                        else:
-                            iterator = iterator + 1
-                            theta_dpp = theta_dp
-                            init_pose = True
-
-                # Get current position and orientation from odom topic
-                pos = np.array([x, y, theta])
-                # Get the error between the current position and the desired position
-                error = pos_d - pos
-                # error[2] = fix_angle(error[2])
-                # Derivate the error using the previous error
-                if len(xe) > 0:
-                    error_d = (error - np.array([xe[-1], ye[-1], thetae[-1]])) / 0.1
-                else:
-                    error_d = np.array([0.0, 0.0, 0.0])
-                # Calculate the velocity (dx,dy,dtheta) using the position control gains (Kp)
-                dpos = np.dot(Kp, error) + np.dot(Kd, error_d)
-                # Convert from (dx,dy,dtheta) to (linear velocity, angular velocity)
-                # using the inverse of the matrix S
-                vel = np.dot(np.linalg.pinv(S), dpos)
-                # Saturate the linear velocity to 0.26 m/s
-                # and the angular velocity to 1.82 rad/s
-                vel[0] = np.clip(vel[0], -v_max, v_max)
-                vel[1] = np.clip(vel[1], -w_max, w_max)
-                # Modify the velocity to publish it to cmd_vel topic
-                Vel.linear.x = vel[0]
-                Vel.angular.z = vel[1]
-                # Print the current position, error and velocity
-                # formatting the values to 2 decimal places and justifying to the right
-                print("Iteration: {0:>3d}".format(iterator))
-                print(
-                    "Desired position: x = {0:>6.4f} y = {1:>6.4f} theta = {2:>6.4f}".format(
-                        pos_d[0], pos_d[1], pos_d[2]
-                    )
-                )
-                print(
-                    "Current position: x = {0:>6.4f} y = {1:>6.4f} theta = {2:>6.4f}".format(
-                        x, y, theta
-                    )
-                )
-                print(
-                    "Error: x = {0:>6.2f} y = {1:>6.4f} theta = {2:>6.4f}".format(
-                        error[0], error[1], error[2]
-                    )
-                )
-                print(
-                    "Velocity: linear = {0:>6.4f} angular = {1:>6.4f}".format(
-                        Vel.linear.x, Vel.angular.z
-                    )
-                )
-
-                t_now = rospy.get_time()
-                tp.append(t_now)
-                xp.append(x)
-                yp.append(y)
-                thetap.append(theta)
-                xdp.append(pos_d[0])
-                ydp.append(pos_d[1])
-                thetadp.append(pos_d[2])
-                xe.append(error[0])
-                ye.append(error[1])
-                thetae.append(error[2])
-
-                axs[0].plot(xp, yp, "b")
-
-                axs[1].plot(tp, xp, "b")
-                axs[2].plot(tp, yp, "b")
-                axs[3].plot(tp, thetap, "b")
-
-                axs[1].plot(tp, xdp, "r")
-                axs[2].plot(tp, ydp, "r")
-                axs[3].plot(tp, thetadp, "r")
-
-                axs[1].plot(tp, xe, "g")
-                axs[2].plot(tp, ye, "g")
-                axs[3].plot(tp, thetae, "g")
-
-                axs[1].get_shared_x_axes().join(axs[1], axs[2], axs[3])
-                axs[1].set_xticklabels([])
-                axs[2].set_xticklabels([])
-
-                plt.draw()
-                plt.pause(0.001)
-            rate.sleep()
-    except KeyboardInterrupt:
-        print("Stopped by user")
-        Vel.linear.x = 0.0
-        Vel.angular.z = 0.0
-        pub.publish(Vel)
-        plt.savefig("controltra.png")
+    kp = [2, 2, 2]
+    kd = [0.3, 0.3, 0.25]
+    ki = [0.5, 0.5, 0.5]
+    traj_x = np.array([-1.0, 1.0, 1.0, 0.5, 0.0, -0.5, -1.0, -1.0])
+    traj_y = np.array([-1.0, -1.0, 1.0, 0.5, 1.0, 0.5, 1.0, -1.0])
+    cp = ControlTrajectory(traj_x, traj_y, -120.0 * np.pi / 180.0, kp, ki, kd)
+    cp.run()
