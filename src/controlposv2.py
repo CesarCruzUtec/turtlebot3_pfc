@@ -11,21 +11,13 @@ from nav_msgs.msg import Odometry
 
 
 class ControlPosition:
-    def __init__(
-        self,
-        xd,
-        yd,
-        thetad,
-        kp,
-        kd=np.array([0.0, 0.0, 0.0]),
-        ki=np.array([0.0, 0.0, 0.0]),
-    ):
+    def __init__(self, xd, yd, thetad, kp, kd, ki):
         self.xd = xd
         self.yd = yd
         self.thetad = thetad
-        self.x = np.array([])
-        self.y = np.array([])
-        self.theta = np.array([])
+        self.x = []
+        self.y = []
+        self.theta = []
         self.k = 0.0
         self.S = np.zeros((3, 2))
         self.kp = np.diag(kp)
@@ -33,43 +25,57 @@ class ControlPosition:
         self.ki = np.diag(ki)
 
     def callback(self, data):
-        self.x = self.x.append(data.pose.pose.position.x)
-        self.y = self.y.append(data.pose.pose.position.y)
+        self.x.append(data.pose.pose.position.x)
+        self.y.append(data.pose.pose.position.y)
         quaternion = data.pose.pose.orientation
         euler = tf.transformations.euler_from_quaternion(
             [quaternion.x, quaternion.y, quaternion.z, quaternion.w]
         )
-        if self.theta.size == 0:
-            self.theta = self.theta.append(euler[2])
+        if len(self.theta) == 0:
+            self.theta.append(euler[2])
         else:
             if (euler[2] - self.theta[-1]) * 10 > 1.9:
                 self.k = self.k + 1
             elif (euler[2] - self.theta[-1]) * 10 < -1.9:
                 self.k = self.k - 1
-            self.theta = self.theta.append(2 * self.k * np.pi + euler[2])
+            self.theta.append(2 * self.k * np.pi + euler[2])
         self.S = np.array(
             [[np.cos(self.theta[-1]), 0.0], [np.sin(self.theta[-1]), 0.0], [0.0, 1.0]]
         )
+    
+    def control(self, pos_d):
+        pos = np.array([self.x[-1], self.y[-1], self.theta[-1]])
+        err = pos_d - pos
+        
+        
+        dpos = np.dot(self.kp, err) + np.dot(self.kd, derr) + np.dot(self.ki, ierr)
 
     def run(self):
         rospy.Subscriber("/odom", Odometry, self.callback)
         pub = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
         rate = rospy.Rate(10)
+        vel = Twist(Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0))
         vmax = 0.26
         wmax = 1.82
         try:
             while not rospy.is_shutdown():
                 os.system("clear")
 
+                self.newDesiredPosition()
+                self.control()
+                
                 print("\n")
                 rate.sleep()
         except KeyboardInterrupt:
-            self.velocity = Twist(Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0))
-            pub.publish(self.velocity)
+            vel = Twist(Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0))
+            pub.publish(vel)
             print("Shutting down")
 
 
 if __name__ == "__main__":
     rospy.init_node("controlpos", disable_signals=True)
+    kp = [1, 1, 1]
+    kd = [0.5, 0.5, 0.5]
+    ki = [0.2, 0.2, 0.2]
     cp = ControlPosition(1.0, 1.0, 45.0 * np.pi / 180.0)
     cp.run()

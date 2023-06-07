@@ -101,16 +101,14 @@ if __name__ == "__main__":
                         Vel.angular.z = 0.0
                         pub.publish(Vel)
                         print("Stopped")
-                        print(
-                            "Final position: x = {0:>6.4f} y = {1:>6.4f} theta = {2:>6.4f}".format(
-                                x, y, theta
-                            )
-                        )
-                        print(
-                            "Final error: x = {0:>6.4f} y = {1:>6.4f} theta = {2:>6.4f}".format(
-                                x_d - x, y_d - y, theta_d - theta
-                            )
-                        )
+                        print("Final position:")
+                        print("x = {0:>6.4f}" % x)
+                        print("y = {1:>6.4f}" % y)
+                        print("theta = {2:>6.4f}" % theta)
+                        print("Final error:")
+                        print("x = {0:>6.4f}" % (x_d - x))
+                        print("y = {1:>6.4f}" % (y_d - y))
+                        print("theta = {2:>6.4f}" % fix_angle(theta_d - theta))
                         plt.savefig("controlpos.png")
                         break
 
