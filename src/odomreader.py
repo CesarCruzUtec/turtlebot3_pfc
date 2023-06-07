@@ -40,14 +40,13 @@ class OdomReader:
             while not rospy.is_shutdown():
                 os.system("clear")
                 print("X = %6.4f m, Y = %6.4f m" % (self.posx, self.posy))
-                print("K = %6.4f" % (self.k))
-                print("Theta = %6.4f rad" % (self.theta))
-                print("ThetaR = %6.4f rad" % (self.thetaR))
+                print("K = %d Theta = %6.4f rad" % (self.k, self.theta))
                 print("Vel_lin = %6.4f m/s" % (self.vel_lin))
                 print("Vel_ang = %6.4f rad/s" % (self.vel_ang))
                 print("\n")
                 rate.sleep()
         except KeyboardInterrupt:
+            os.system("clear")
             print("Shutting down")
 
 

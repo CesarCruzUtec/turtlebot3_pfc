@@ -73,7 +73,7 @@ if __name__ == "__main__":
     v_max = 0.26  # 0.26 m/s
     w_max = 1.82  # 1.82 rad/s
 
-    x_d, y_d, theta_d = 0.0, 0.0, 0.0
+    x_d, y_d, theta_d = 0.0, 0.0, -30.0
     theta_d = theta_d * np.pi / 180
 
     axs[0].plot(x_d, y_d, "ro", markersize=2)
@@ -102,13 +102,13 @@ if __name__ == "__main__":
                         pub.publish(Vel)
                         print("Stopped")
                         print("Final position:")
-                        print("x = {0:>6.4f}" % x)
-                        print("y = {1:>6.4f}" % y)
-                        print("theta = {2:>6.4f}" % theta)
+                        print("x = %6.4f" % x)
+                        print("y = %6.4f" % y)
+                        print("theta = %6.4f" % theta)
                         print("Final error:")
-                        print("x = {0:>6.4f}" % (x_d - x))
-                        print("y = {1:>6.4f}" % (y_d - y))
-                        print("theta = {2:>6.4f}" % fix_angle(theta_d - theta))
+                        print("x = %6.4f" % (x_d - x))
+                        print("y = %6.4f" % (y_d - y))
+                        print("theta = %6.4f" % fix_angle(theta_d - theta))
                         plt.savefig("controlpos.png")
                         break
 
