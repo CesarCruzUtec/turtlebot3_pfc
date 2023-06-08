@@ -16,6 +16,7 @@ class ControlTrajectory:
         self.x_True = xd
         self.y_True = yd
         self.theta_True = thetad
+        self.thetaP = 0.0
         self.x, self.y, self.theta = 0.0, 0.0, 0.0
         self.xd, self.yd, self.thetad = [], [], []
         self.xp, self.yp, self.thetap = [], [], []
@@ -34,6 +35,8 @@ class ControlTrajectory:
         self.step = [True, True]
         self.iterator = 0
         self.finished = False
+        self.status = "Not started"
+        self.pos_d = np.array([0.0, 0.0, 0.0])
 
     def callback(self, data):
         self.x = data.pose.pose.position.x
@@ -42,11 +45,12 @@ class ControlTrajectory:
         euler = tf.transformations.euler_from_quaternion(
             [quaternion.x, quaternion.y, quaternion.z, quaternion.w]
         )
-        if (euler[2] - self.theta) * 10 > 1.9:
+        if (euler[2] - self.thetaP) > 1.9*np.pi:
             self.k = self.k + 1
-        elif (euler[2] - self.theta) * 10 < -1.9:
+        elif (euler[2] - self.thetaP) < -1.9*np.pi:
             self.k = self.k - 1
-        self.theta = 2 * np.pi * self.k + euler[2]
+        self.thetaP = euler[2]
+        self.theta = 2 * np.pi * self.k + self.thetaP
         self.S = np.array(
             [[np.cos(self.theta), 0.0], [np.sin(self.theta), 0.0], [0.0, 1.0]]
         )
@@ -67,7 +71,7 @@ class ControlTrajectory:
         self.ax2.tick_params(labelbottom=False)
         self.ax3.tick_params(labelbottom=False)
 
-        self.ax1.plot(self.x_True[0], self.y_True[1], "r--")
+        self.ax1.plot(self.x_True, self.y_True, "r--")
         plt.draw()
         plt.pause(0.001)
 
@@ -90,6 +94,7 @@ class ControlTrajectory:
         plt.pause(0.001)
 
     def printStatus(self):
+        # print(self.status)
         print("Current position: ")
         print("    x = {:>6.4f}".format(self.xp[-1]))
         print("    y = {:>6.4f}".format(self.yp[-1]))
@@ -104,29 +109,31 @@ class ControlTrajectory:
         print("theta = {:>6.4f}".format(self.thetae[-1] * 180 / np.pi))
 
     def newDesiredPosition(self):
-        posd = np.array(self.x_True[self.iterator], self.y_True[self.iterator], 0.0)
-        err = posd - np.array([self.x, self.y, 0.0])
-        theta_dp = np.arctan2(err[1], err[0]) + 2 * np.pi * self.k
-        if np.linalg.norm(err[0:2]) > 0.02 and self.step[0]:
-            err[2] = theta_dp - self.theta
-            if abs(err[2]) > 0.01 and self.step[1]:
-                self.pos_d = np.array([self.x, self.y, theta_dp])
-                print("Rotating to next orientation")
+        if self.iterator != len(self.x_True):
+            posd = np.array([self.x_True[self.iterator], 
+                             self.y_True[self.iterator], 0.0])
+            err = posd - np.array([self.x, self.y, 0.0])
+            theta_dp = np.arctan2(err[1], err[0]) + 2 * np.pi * self.k
+            if np.linalg.norm(err[0:2]) > 0.02 and self.step[0]:
+                err[2] = theta_dp - self.theta
+                if abs(err[2]) > 0.01 and self.step[1]:
+                    self.pos_d = np.array([self.x, self.y, theta_dp])
+                    self.status = "Rotating to next orientation"
+                else:
+                    self.step[1] = False
+                    self.pos_d = np.array([posd[0], posd[1], theta_dp])
+                    self.status = "Moving to next position"
             else:
-                self.step[1] = False
-                self.pos_d = np.array([posd[0], posd[1], theta_dp])
-                print("Moving to next position")
+                self.iterator = self.iterator + 1
+                self.newPath = True
+                self.step = [True, True]
         else:
-            self.step[0] = False
-            err[2] = self.posd_True[2] - self.theta + 2 * np.pi * self.k
-            if abs(err[2]) > 0.01 and not self.step[1]:
-                self.pos_d = self.posd_True
-                print("Rotating to final orientation")
-            else:
-                self.step[1] = True
+            self.pos_d = np.array([self.x, self.y, self.theta_True+2*np.pi*self.k])
+            err = self.pos_d - np.array([self.x, self.y, self.theta])
+            if abs(err[2]) < 0.01:
                 self.finished = True
-                print("Final position reached")
-                plt.savefig("controlPos.png")
+                self.status = "Final position reached"
+                plt.savefig("controlTra.png")
                 plt.close()
 
         self.xd.append(self.pos_d[0])
@@ -136,7 +143,7 @@ class ControlTrajectory:
     def control(self):
         pos = np.array([self.x, self.y, self.theta])
         err = self.pos_d - pos
-        if self.newPath:
+        if len(self.xe) == 0:
             derr = np.array([0.0, 0.0, 0.0])
             ierr = np.array([0.0, 0.0, 0.0])
             self.ierr_p = np.array([0.0, 0.0, 0.0])
@@ -174,6 +181,11 @@ class ControlTrajectory:
                 rate.sleep()
             self.vel = Twist(Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0))
             pub.publish(self.vel)
+            np.savetxt("controlTraSim.txt",np.column_stack(
+                (self.xp, self.yp, self.thetap,
+                self.xd, self.yd, self.thetad,
+                self.xe, self.ye, self.thetae)
+            ))
         except KeyboardInterrupt:
             self.vel = Twist(Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0))
             pub.publish(self.vel)
@@ -184,10 +196,10 @@ class ControlTrajectory:
 
 if __name__ == "__main__":
     rospy.init_node("controltra", disable_signals=True)
-    kp = [2, 2, 2]
-    kd = [0.3, 0.3, 0.25]
-    ki = [0.5, 0.5, 0.5]
+    kp = [0.7, 0.7, 0.85]
+    kd = [0.1, 0.1, 0.05]
+    ki = [1.5, 1.5, 2.00]
     traj_x = np.array([-1.0, 1.0, 1.0, 0.5, 0.0, -0.5, -1.0, -1.0])
-    traj_y = np.array([-1.0, -1.0, 1.0, 0.5, 1.0, 0.5, 1.0, -1.0])
+    traj_y = np.array([-1.0, -1.0, 1.0, 0.5, 1.0, 0.5, 1.0, -0.5])
     cp = ControlTrajectory(traj_x, traj_y, -120.0 * np.pi / 180.0, kp, ki, kd)
     cp.run()
