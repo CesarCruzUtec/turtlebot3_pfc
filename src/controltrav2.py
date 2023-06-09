@@ -133,7 +133,7 @@ class ControlTrajectory:
             if abs(err[2]) < 0.01:
                 self.finished = True
                 self.status = "Final position reached"
-                plt.savefig("controlTra.png")
+                plt.savefig("controlTraReal.png")
                 plt.close()
 
         self.xd.append(self.pos_d[0])
@@ -181,7 +181,7 @@ class ControlTrajectory:
                 rate.sleep()
             self.vel = Twist(Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0))
             pub.publish(self.vel)
-            np.savetxt("controlTraSim.txt",np.column_stack(
+            np.savetxt("controlTraReal.txt",np.column_stack(
                 (self.xp, self.yp, self.thetap,
                 self.xd, self.yd, self.thetad,
                 self.xe, self.ye, self.thetae)
@@ -189,14 +189,14 @@ class ControlTrajectory:
         except KeyboardInterrupt:
             self.vel = Twist(Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0))
             pub.publish(self.vel)
-            plt.savefig("controlTra.png")
+            plt.savefig("controlTraReal.png")
             plt.close()
             print("Shutting down")
 
 
 if __name__ == "__main__":
     rospy.init_node("controltra", disable_signals=True)
-    kp = [0.7, 0.7, 0.85]
+    kp = [0.7, 0.7, 0.75]
     kd = [0.1, 0.1, 0.05]
     ki = [1.5, 1.5, 2.00]
     traj_x = np.array([-1.0, 1.0, 1.0, 0.5, 0.0, -0.5, -1.0, -1.0])

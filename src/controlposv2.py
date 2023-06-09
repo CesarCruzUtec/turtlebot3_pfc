@@ -183,5 +183,5 @@ if __name__ == "__main__":
     kp = [2, 2, 2]
     kd = [0.3, 0.3, 0.25]
     ki = [0.5, 0.5, 0.5]
-    cp = ControlPosition(-1.0, 1.5, -120.0 * np.pi / 180.0, kp, ki, kd)
+    cp = ControlPosition(0.0, 0.0, 0.0, kp, ki, kd)
     cp.run()
