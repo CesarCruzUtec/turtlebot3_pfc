@@ -62,11 +62,17 @@ class ControlTrajectory:
         self.ax2 = self.fig.add_subplot(gs1[0, 1])
         self.ax3 = self.fig.add_subplot(gs1[1, 1], sharex=self.ax2)
         self.ax4 = self.fig.add_subplot(gs1[2, 1], sharex=self.ax2)
-        self.ax1.set_xlim(-1.5, 1.5), self.ax1.set_ylim(-1.5, 1.5)
-        self.ax1.grid(), self.ax2.grid(), self.ax3.grid(), self.ax4.grid()
+        self.ax1.set_xlim(-1.5, 1.5)
+        self.ax1.set_ylim(-1.5, 1.5)
+        self.ax1.grid()
+        self.ax2.grid()
+        self.ax3.grid()
+        self.ax4.grid()
         self.ax1.set_xlabel("x(m)")
-        self.ax1.set_ylabel("y(m)"), self.ax2.set_ylabel("x(m)")
-        self.ax3.set_ylabel("y(m)"), self.ax4.set_ylabel("theta(rad)")
+        self.ax1.set_ylabel("y(m)")
+        self.ax2.set_ylabel("x(m)")
+        self.ax3.set_ylabel("y(m)")
+        self.ax4.set_ylabel("theta(rad)")
         self.ax4.set_xlabel("time(s)")
         self.ax2.tick_params(labelbottom=False)
         self.ax3.tick_params(labelbottom=False)
@@ -77,7 +83,9 @@ class ControlTrajectory:
 
     def update_plot(self):
         self.time.append(rospy.get_time() - self.initialTime)
-        self.xp.append(self.x), self.yp.append(self.y), self.thetap.append(self.theta)
+        self.xp.append(self.x)
+        self.yp.append(self.y)
+        self.thetap.append(self.theta)
 
         self.ax1.plot(self.xp, self.yp, "b")
         self.ax2.plot(self.time, self.xp, "b")
@@ -152,7 +160,9 @@ class ControlTrajectory:
             err_p = np.array([self.xe[-1], self.ye[-1], self.thetae[-1]])
             derr = (err - err_p) * self.rate
             ierr = self.ierr_p + err / self.rate
-        self.xe.append(err[0]), self.ye.append(err[1]), self.thetae.append(err[2])
+        self.xe.append(err[0])
+        self.ye.append(err[1])
+        self.thetae.append(err[2])
         dpos = np.dot(self.kp, err) + np.dot(self.kd, derr) + np.dot(self.ki, ierr)
         ik = np.dot(np.linalg.pinv(self.S), dpos)
         self.vel.linear.x = np.clip(ik[0], -self.vmax, self.vmax)
