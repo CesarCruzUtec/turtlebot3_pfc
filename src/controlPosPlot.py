@@ -31,6 +31,7 @@ class ControlPosition:
         self.wmax = 1.82
         self.step = [True, True]
         self.finished = False
+        self.pos_d = np.array([0.0, 0.0, 0.0])
 
     def callback(self, data):
         self.x = data.pose.pose.position.x
@@ -149,6 +150,7 @@ class ControlPosition:
             err_p = np.array([self.xe[-1], self.ye[-1], self.thetae[-1]])
             derr = (err - err_p) * self.rate
             ierr = self.ierr_p + err / self.rate
+            self.ierr_p = ierr
         self.xe.append(err[0])
         self.ye.append(err[1])
         self.thetae.append(err[2])
@@ -193,5 +195,5 @@ if __name__ == "__main__":
     kp = [2, 2, 2]
     kd = [0.3, 0.3, 0.25]
     ki = [0.5, 0.5, 0.5]
-    cp = ControlPosition(0.0, 0.0, 0.0, kp, ki, kd)
+    cp = ControlPosition(0.0, 0.0, np.pi/2, kp, ki, kd)
     cp.run()
