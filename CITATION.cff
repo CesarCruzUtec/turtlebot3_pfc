@@ -1,0 +1,17 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: 'Turtlebot 3 Custom Navigation '
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Cesar Adolfo
+    family-names: Cruz Vargaya
+    email: cesar.cruz.v@utec.edu.pe
+    affiliation: Universidad de Ingeniería y Tecnología
+    orcid: 'https://orcid.org/0009-0001-8033-7281'
+repository-code: 'https://github.com/CesarCruzUtec/turtlebot3_pfc'
+license: MIT
