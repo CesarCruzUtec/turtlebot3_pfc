@@ -81,12 +81,12 @@ class RandomMov:
     def run(self):
         pub = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
         rospy.Subscriber("/odom", Odometry, self.callback)
-        rate = rospy.Rate(100)
+        rate = rospy.Rate(10)
         try:
             while not rospy.is_shutdown():
                 self.randomMov()
                 pub.publish(self.velocity)
-                self.printAndsave()
+                #self.printAndsave()
                 rate.sleep()
         except KeyboardInterrupt:
             self.velocity = Twist(Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0))

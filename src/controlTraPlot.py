@@ -24,6 +24,8 @@ class ControlTrajectory:
         self.xei, self.yei, self.thetaei = [], [], []
         self.xed, self.yed, self.thetaed = [], [], []
         self.linear_vel, self.angular_vel = [], []
+        self.vel_lin, self.vel_ang = 0.0, 0.0
+        self.lin_real, self.ang_real = [], []
         self.time = []
         self.k = 0.0
         self.S = np.zeros((3, 2))
@@ -53,11 +55,14 @@ class ControlTrajectory:
             self.k = self.k + 1
         elif (euler[2] - self.thetaP) < -1.9*np.pi:
             self.k = self.k - 1
-        self.thetaP = euler[2]
-        self.theta = 2 * np.pi * self.k + self.thetaP
+        self.theta = euler[2]
+        # self.theta = 2 * np.pi * self.k + self.thetaP
         self.S = np.array(
             [[np.cos(self.theta), 0.0], [np.sin(self.theta), 0.0], [0.0, 1.0]]
         )
+        self.vel_lin = data.twist.twist.linear.x
+        self.vel_ang = data.twist.twist.angular.z
+        
 
     def plot_init(self):
         self.fig = plt.figure(figsize=(12, 6))
@@ -66,8 +71,8 @@ class ControlTrajectory:
         self.ax2 = self.fig.add_subplot(gs1[0, 1])
         self.ax3 = self.fig.add_subplot(gs1[1, 1], sharex=self.ax2)
         self.ax4 = self.fig.add_subplot(gs1[2, 1], sharex=self.ax2)
-        self.ax1.set_xlim(-1.5, 1.5)
-        self.ax1.set_ylim(-1.5, 1.5)
+        self.ax1.set_xlim(-5, 1)
+        self.ax1.set_ylim(-2, 5)
         self.ax1.grid()
         self.ax2.grid()
         self.ax3.grid()
@@ -83,27 +88,29 @@ class ControlTrajectory:
 
         self.ax1.plot(self.x_True, self.y_True, "r--")
         plt.draw()
-        plt.pause(0.001)
+        plt.pause(0.01)
 
     def update_plot(self):
         self.time.append(rospy.get_time() - self.initialTime)
         self.xp.append(self.x)
         self.yp.append(self.y)
         self.thetap.append(self.theta)
+        self.lin_real.append(self.vel_lin)
+        self.ang_real.append(self.vel_ang)
 
-        self.ax1.plot(self.xp, self.yp, "b", linewidth=1.0)
-        self.ax2.plot(self.time, self.xp, "b", linewidth=1.0)
-        self.ax2.plot(self.time, self.xd, "r", linewidth=1.0)
-        self.ax2.plot(self.time, self.xe, "g", linewidth=1.0)
-        self.ax3.plot(self.time, self.yp, "b", linewidth=1.0)
-        self.ax3.plot(self.time, self.yd, "r", linewidth=1.0)
-        self.ax3.plot(self.time, self.ye, "g", linewidth=1.0)
-        self.ax4.plot(self.time, self.thetap, "b", linewidth=1.0)
-        self.ax4.plot(self.time, self.thetad, "r", linewidth=1.0)
-        self.ax4.plot(self.time, self.thetae, "g", linewidth=1.0)
+        self.ax1.plot(self.xp, self.yp, "b", linewidth=0.5)
+        self.ax2.plot(self.time, self.xp, "b", linewidth=0.5)
+        self.ax2.plot(self.time, self.xd, "r", linewidth=0.5)
+        self.ax2.plot(self.time, self.xe, "g", linewidth=0.5)
+        self.ax3.plot(self.time, self.yp, "b", linewidth=0.5)
+        self.ax3.plot(self.time, self.yd, "r", linewidth=0.5)
+        self.ax3.plot(self.time, self.ye, "g", linewidth=0.5)
+        self.ax4.plot(self.time, self.thetap, "b", linewidth=0.5)
+        self.ax4.plot(self.time, self.thetad, "r", linewidth=0.5)
+        self.ax4.plot(self.time, self.thetae, "g", linewidth=0.5)
 
         plt.draw()
-        plt.pause(0.001)
+        plt.pause(0.01)
 
     def printStatus(self):
         # print(self.status)
@@ -125,7 +132,7 @@ class ControlTrajectory:
             posd = np.array([self.x_True[self.iterator], 
                              self.y_True[self.iterator], 0.0])
             err = posd - np.array([self.x, self.y, 0.0])
-            theta_dp = np.arctan2(err[1], err[0]) + 2 * np.pi * self.k
+            theta_dp = np.arctan2(err[1], err[0])
             if np.linalg.norm(err[0:2]) > 0.02 and self.step[0]:
                 err[2] = theta_dp - self.theta
                 if abs(err[2]) > 0.01 and self.step[1]:
@@ -142,7 +149,7 @@ class ControlTrajectory:
                 self.newPath = True
                 self.step = [True, True]
         else:
-            self.pos_d = np.array([self.x, self.y, self.theta_True+2*np.pi*self.k])
+            self.pos_d = np.array([self.x, self.y, self.theta_True])
             err = self.pos_d - np.array([self.x, self.y, self.theta])
             if abs(err[2]) < 0.01:
                 self.finished = True
@@ -211,12 +218,13 @@ class ControlTrajectory:
             self.vel = Twist(Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0))
             pub.publish(self.vel)
             np.savetxt("controlTraReal.txt",np.column_stack(
-                (self.xp, self.yp, self.thetap,
-                self.xd, self.yd, self.thetad,
-                self.xe, self.ye, self.thetae,
-                self.xei, self.yei, self.thetaei,
-                self.xed, self.yed, self.thetaed,
-                self.linear_vel, self.angular_vel)
+                (self.time,self.xp, self.yp, self.thetap,
+                # self.xd, self.yd, self.thetad,
+                # self.xe, self.ye, self.thetae,
+                # self.xei, self.yei, self.thetaei,
+                # self.xed, self.yed, self.thetaed,
+                self.linear_vel, self.angular_vel,
+                self.lin_real, self.ang_real)
             ))
         except KeyboardInterrupt:
             self.vel = Twist(Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0))
@@ -228,13 +236,11 @@ class ControlTrajectory:
 
 if __name__ == "__main__":
     rospy.init_node("controltra", disable_signals=True)
-    kp = [1.0, 1.0, 0.7]
-    kd = [0.2, 0.2, 0.10]
-    ki = [4e-3, 4e-3, 3e-3]
-    # kp = [1.2, 1.2, 0.72]
-    # kd = [0.2, 0.2, 0.10]
-    # ki = [4e-3, 4e-3, 3e-3]
-    traj_x = np.array([-1.0, 1.0, 1.0, 0.5, 0.0, -0.5, -1.0, -1.0])
-    traj_y = np.array([-1.0, -1.0, 1.0, 0.5, 1.0, 0.5, 1.0, -0.5])
-    cp = ControlTrajectory(traj_x, traj_y, -120.0 * np.pi / 180.0, kp, ki, kd)
+    kp = [0.8, 0.8, 0.8]
+    ki = [5e-3, 5e-3, 7e-3]
+    kd = [0.0, 0.0, 0.0]
+
+    traj_x = np.array([-2.0, -4.0, -4.0])
+    traj_y = np.array([-1.0, 1.0, 4.0])
+    cp = ControlTrajectory(traj_x, traj_y, 0.0, kp, ki, kd)
     cp.run()
