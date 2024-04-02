@@ -1,2 +1,5 @@
 package.xml
 CMakeLists.txt
+build/
+devel/
+.catkin_workspace
